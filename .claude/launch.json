@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cps305-quest",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8305", "--bind", "127.0.0.1"],
+      "port": 8305
+    }
+  ]
+}

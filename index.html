@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPS305 Quest</title>
+  <meta name="description" content="A browser game for learning CPS 305 Data Structures by playing with each algorithm.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b1a14'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='16' fill='%2333d17a' text-anchor='middle'%3E()%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <a class="logo" href="#/" aria-label="CPS305 Quest, back to the map"><span class="logo-paren" aria-hidden="true">(</span>CPS305 Quest<span class="logo-paren" aria-hidden="true">)</span></a>
+    <nav class="topnav" aria-label="Main">
+      <a href="#/">Map</a>
+      <a href="#/cheatsheet">Cheat Sheet</a>
+      <a href="#/mastery">Mastery</a>
+      <a href="#/settings">Settings</a>
+    </nav>
+    <div class="hud" aria-label="Your progress">
+      <span id="hud-xp" class="hud-chip">0 XP</span>
+      <span id="hud-streak" class="hud-chip">🔥 0 days</span>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <noscript><p>CPS305 Quest needs JavaScript to run.</p></noscript>
+  </main>
+
+  <!-- Screen-reader announcements for state changes -->
+  <div id="live" class="sr" aria-live="polite" aria-atomic="true"></div>
+
+  <footer class="footer">Unofficial study aid based on CPS 305 lecture materials.</footer>
+
+  <!-- engine/: pure step generators, no DOM -->
+  <script src="engine/core.js"></script>
+  <script src="engine/search.js"></script>
+  <script src="engine/sorts.js"></script>
+  <script src="engine/referee.js"></script>
+  <!-- state/: progress, mastery, settings -->
+  <script src="state/store.js"></script>
+  <!-- content/: data only -->
+  <script src="content/units.js"></script>
+  <script src="content/unit5.js"></script>
+  <!-- ui/: reusable components -->
+  <script src="ui/dom.js"></script>
+  <script src="ui/arrayView.js"></script>
+  <script src="ui/codePanel.js"></script>
+  <script src="ui/stepper.js"></script>
+  <script src="ui/widgets.js"></script>
+  <script src="ui/quiz.js"></script>
+  <script src="ui/runner.js"></script>
+  <script src="ui/watcher.js"></script>
+  <!-- ui/games/: one controller per mini-game -->
+  <script src="ui/games/common.js"></script>
+  <script src="ui/games/library.js"></script>
+  <script src="ui/games/sortlab.js"></script>
+  <script src="ui/games/inversions.js"></script>
+  <script src="ui/games/scale.js"></script>
+  <script src="ui/games/stable.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
