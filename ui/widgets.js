@@ -66,6 +66,40 @@
     return { title: e.title ? U.fmt(e.title, res.data) : null, why: U.fmt(e.why, res.data), misconception: e.misconception ? U.fmt(e.misconception, res.data) : null };
   };
 
+  /* Share bar: each term's share of the total cost at a chosen n. Segments carry
+   * a pattern and a text label, so colour is never the only signal. */
+  U.shareBar = function (container, terms, opts) {
+    opts = opts || {};
+    var B = root.CQ.engine.bigo;
+    var ns = opts.ns || [1, 10, 100, 1000, 1000000];
+    var el = h('div.sharebar');
+    var row = h('div.share-ns', { role: 'radiogroup', 'aria-label': 'Choose n' });
+    var bar = h('div.share-track');
+    var list = h('ul.share-list', { 'aria-live': 'polite' });
+    el.appendChild(h('div.share-head', null, h('span', null, opts.label || 'Share of the total cost at'), row));
+    el.appendChild(bar); el.appendChild(list);
+    container.appendChild(el);
+    var cur = opts.start != null ? opts.start : 1, live = terms;
+    ns.forEach(function (n, i) {
+      var b = U.button('n = ' + (n >= 1e6 ? '10⁶' : n.toLocaleString('en-US')), function () { cur = i; draw(); }, { cls: 'small', attrs: { role: 'radio' } });
+      row.appendChild(b);
+    });
+    function draw() {
+      Array.prototype.forEach.call(row.children, function (b, i) { b.setAttribute('aria-checked', i === cur ? 'true' : 'false'); b.classList.toggle('primary', i === cur); });
+      var n = ns[cur], sh = B.shares(live, n);
+      U.clear(bar); U.clear(list);
+      live.forEach(function (t, i) {
+        var pct = sh[i] * 100;
+        var seg = h('span.share-seg.seg' + (i % 4 + 1), { style: { width: pct + '%' }, title: B.termText(t) + ': ' + pct.toFixed(1) + '%' });
+        if (pct >= 12) seg.textContent = B.termText(t);
+        bar.appendChild(seg);
+        list.appendChild(h('li', null, h('span.share-sw.seg' + (i % 4 + 1), { 'aria-hidden': 'true' }), B.termText(t) + ': ' + (pct < 0.01 && pct > 0 ? '< 0.01' : pct.toFixed(pct < 1 ? 2 : 1)) + '%'));
+      });
+    }
+    draw();
+    return { el: el, setTerms: function (t) { live = t; draw(); } };
+  };
+
   /* Mode chips: Watch -> Try -> Solo (fading scaffolding). */
   U.modeChip = function (mode) {
     var map = { watch: '👀 Watch', try: '🛠 Try', solo: '🎯 Solo', sandbox: '🧪 Practice', boss: '👾 Boss' };

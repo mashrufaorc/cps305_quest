@@ -581,6 +581,7 @@
     id: 5,
     title: 'Searching and sorting',
     room: 'The Archive',
+    bossTitle: 'The Archive Overseer',
     intro: 'The Archive\'s filing robots are broken. Files are everywhere, and searches take forever. Fix the search, then fix the sorting.',
     lisp: lisp,
     explain: explain,

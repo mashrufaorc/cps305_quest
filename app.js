@@ -68,7 +68,7 @@
     el.appendChild(map);
     var st = S.get();
     el.appendChild(h('div.hub-actions', null,
-      h('a.btn.primary', { href: '#/u/5' }, S.unitFlag(5, 'briefing') ? 'Continue in The Archive' : 'Start in The Archive (Unit 5)'),
+      nextUnitButton(),
       h('button.btn', { type: 'button', disabled: true, title: 'Arrives once several units are built' }, 'Placement quiz (coming soon)'),
       h('a.btn', { href: '#/cheatsheet' }, 'Cheat Sheet'),
       h('a.btn', { href: '#/mastery' }, 'Mastery')));
@@ -76,6 +76,14 @@
     if (due.length) el.appendChild(h('p.note', null, '🔁 ' + due.length + ' concept(s) are due for review. (The Review Room opens in a later phase; you can see them on the Mastery page.)'));
     if (!S.storageOk()) el.appendChild(h('p.note.warn', null, 'Progress can\'t be saved in this browser (storage is blocked). Everything still works; it just resets when you close the tab.'));
     void st;
+  }
+
+  /* The next built unit (in course order) whose Boss isn't cleared yet. */
+  function nextUnitButton() {
+    var built = C.units.filter(function (u) { return u.built && unitOf(u.id); });
+    var u = built.filter(function (x) { return !S.unitFlag(x.id, 'boss'); })[0] || built[0];
+    var started = S.unitFlag(u.id, 'briefing');
+    return h('a.btn.primary', { href: '#/u/' + u.id }, (started ? 'Continue in ' : 'Start in ') + u.room + ' (Unit ' + u.id + ')');
   }
 
   /* ---------- unit room ---------- */
@@ -155,6 +163,8 @@
       };
       var afterText = function () { if (s.after) { var a = h('p.after'); a.appendChild(U.rich(s.after)); area.appendChild(a); } nextBtn(); };
       if (s.kind === 'shelf') shelf(area, s, afterText);
+      else if (s.kind === 'tale') tale(area, afterText);
+      else if (s.kind === 'shares') { U.shareBar(area, s.terms, { start: 0, label: 'f(n) = 2n² + 4n + 9. Share of the total at' }); G.continueBtn(area, 'I see it', afterText); }
       else if (s.kind === 'race') {
         var vals = E.makeInput('sorted', 10, 4);
         G.continueBtn(area, 'Run both ▶', function () {
@@ -205,6 +215,30 @@
     function finish() { if (done) return; done = true; skip.remove(); render(); after(); }
     render();
     setTimeout(function () { view.focus(); }, 50);
+  }
+
+  /* Briefing (Unit 2): the lecture's loop vs formula, with a slider for n. */
+  function tale(area, after) {
+    var n = 3;
+    var slider = h('input', { type: 'range', min: 1, max: 30, value: n, 'aria-label': 'Input size n' });
+    var out = h('output.n-out', null, 'n = ' + n);
+    var lanes = h('div.lanes', { 'aria-live': 'polite' });
+    area.appendChild(h('label.slider-row', null, 'n ', slider, out));
+    area.appendChild(lanes);
+    function draw() {
+      n = +slider.value; out.textContent = 'n = ' + n;
+      var rows = [{ name: 'Loop', v: Math.max(0, n - 1) }, { name: 'Formula', v: 3 }];
+      var max = Math.max(rows[0].v, rows[1].v, 1);
+      U.clear(lanes);
+      rows.forEach(function (r, i) {
+        var cheaper = r.v < rows[1 - i].v;
+        lanes.appendChild(h('div.lane', null, h('span.lane-name', null, r.name), h('span.lane-track', null, h('span.lane-bar.seg' + (i + 1), { style: { width: Math.max(1, r.v / max * 100) + '%' } })),
+          h('span.lane-val', null, r.v + ' operation' + (r.v === 1 ? '' : 's') + (cheaper ? '  ★ cheaper' : ''))));
+      });
+    }
+    slider.addEventListener('input', draw);
+    draw();
+    G.continueBtn(area, 'I see it', after, true);
   }
 
   /* ---------- level ---------- */
@@ -269,7 +303,7 @@
   function quizScreen(uid, which) {
     var d = unitOf(uid);
     var qs = d[which];
-    var title = which === 'trace' ? 'Trace the Code' : 'Boss: The Archive Overseer';
+    var title = which === 'trace' ? 'Trace the Code' : 'Boss: ' + (d.bossTitle || d.room);
     var el = screen(title, [{ label: 'Map', href: '#/' }, { label: d.room, href: '#/u/' + uid }, { label: title }]);
     if (which === 'boss') el.appendChild(h('p.lede', null, 'Mixed questions from this unit, one hands-on task, and a flashback. No lives, no game over: a slip only costs score.'));
     else el.appendChild(h('p.lede', null, 'Short Lisp questions in the lecture\'s style. Read, trace, predict.'));
@@ -306,7 +340,9 @@
       updateHud();
     }
     function mountTask(container, q, done) {
-      if (q.task === 'binary') {
+      if (q.task === 'simplify') {
+        G.simplifyTask(container, { terms: q.terms, unit: d, hints: false, onDone: function (r) { done({ misses: r.misses, summary: 'It is ' + r.cls + '.' }); } });
+      } else if (q.task === 'binary') {
         var vals = E.makeInput('sorted', q.n, q.seed);
         var key = vals[E.randInt(E.rng(q.seed + Date.now() % 97), 0, vals.length - 1)];
         U.runner(container, { algo: 'binary', values: vals, key: key, unit: d, gameId: 'boss', hints: false, conceal: true, showCode: false,

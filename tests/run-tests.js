@@ -13,8 +13,8 @@ function makeCtx() {
   var ctx = { console: console, Math: Math, Date: Date };
   ctx.globalThis = ctx;
   vm.createContext(ctx);
-  ['engine/core.js', 'engine/search.js', 'engine/sorts.js', 'engine/referee.js', 'state/store.js',
-   'content/units.js', 'content/unit5.js'].forEach(function (f) {
+  ['engine/core.js', 'engine/search.js', 'engine/sorts.js', 'engine/referee.js', 'engine/bigo.js', 'state/store.js',
+   'content/units.js', 'content/unit2.js', 'content/unit5.js'].forEach(function (f) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   });
   return ctx;
@@ -190,15 +190,79 @@ var u5 = ctx.CQ.content.unitData[5];
  'bubble.shouldSwap', 'bubble.shouldKeep', 'bubble.equal', 'bsearch.discarded', 'bsearch.notMiddle', 'lsearch.skip', 'lsearch.again', 'inv.inOrder', 'inv.equal', 'inv.same'
 ].forEach(function (code) { ok(!!u5.explain[code], 'content explains referee code ' + code); });
 
+
+section('Unit 2: Big-O engine');
+var Bo = E.bigo;
+eq(Bo.classes.map(function (c) { return c.id; }), ['1', 'logn', 'n', 'nlogn', 'n2', 'n3', '2n', 'nfact'], 'classes in growth order');
+var lec = [{ c: 2, k: 'n2', coefShown: true }, { c: 4, k: 'n', coefShown: true }, { c: 9, k: '1', coefShown: true }];
+eq(Bo.evalTerms(lec, 10), 249, '2n²+4n+9 at n=10');
+eq(Bo.dominant(lec).k, 'n2', 'dominant term of 2n²+4n+9');
+ok(Bo.shares(lec, 1e6)[0] > 0.9999, 'dominant share -> 1 as n grows');
+ok(Bo.shares(lec, 1)[2] > 0.5, 'constant dominates at n = 1');
+var ng = [{ c: 1, k: 'n2' }], g3 = [{ c: 1, k: 'n2' }, { c: 3, k: 'n' }, { c: 2, k: '1' }];
+ok(Math.abs(Bo.evalTerms(g3, 1000) - Bo.evalTerms(ng, 1000)) / Bo.evalTerms(ng, 1000) < 0.004, 'lecture: n² vs n²+3n+2 within 0.3% at n=1000');
+eq(Bo.checkSimplify(lec, { type: 'term', i: 0 }).code, 'simp.dropDominant', 'dropping the dominant term is refused');
+eq(Bo.checkSimplify(lec, { type: 'term', i: 2 }).ok, true, 'dropping 9 is fine');
+eq(Bo.checkSimplify(lec, { type: 'coef', i: 2 }).code, 'simp.constCoef', 'constant has no coefficient to drop');
+eq(Bo.checkSimplify(lec, { type: 'coef', i: 0 }).ok, true, 'dropping 2 from 2n² is fine');
+eq(Bo.simplifyDone(lec), false, 'not done with three terms');
+eq(Bo.simplifyDone([{ c: 2, k: 'n2', coefShown: false }]), true, 'done: n²');
+eq(Bo.simplifyDone([{ c: 2, k: 'n2', coefShown: true }]), false, 'not done: coefficient left');
+[1, 2, 3].forEach(function (tier) {
+  for (var sd = 1; sd <= 30; sd++) {
+    var ts = Bo.randomTerms(tier, sd), ks = ts.map(function (t) { return t.k; });
+    ok(new Set(ks).size === ks.length, 'randomTerms tier ' + tier + ' distinct classes');
+    ok(Bo.dominant(ts).c >= 2, 'randomTerms tier ' + tier + ' dominant has a coefficient to drop');
+  }
+});
+var f = function (terms) { return function (n) { return Bo.evalTerms(terms, n); }; };
+eq(Bo.crossover(f([{ c: 1, k: 'n2' }]), f([{ c: 10, k: 'n' }]), 1, 5000), 11, 'n² overtakes 10n at 11');
+eq(Bo.crossover(f([{ c: 1, k: '2n' }]), f([{ c: 1, k: 'n3' }]), 1, 5000), 10, '2ⁿ overtakes n³ for good at 10');
+eq(Bo.crossover(function (n) { return n - 1; }, function () { return 3; }, 1, 1000), 5, 'loop (n−1) costs more than formula (3) from n = 5');
+eq(Bo.crossover(f([{ c: 2, k: 'n2' }]), f([{ c: 500, k: 'n' }]), 1, 5000), 251, '2n² overtakes 500n at 251');
+Object.keys(ctx.CQ.content.unitData[2].races).forEach(function (t) {
+  ctx.CQ.content.unitData[2].races[t].forEach(function (r) {
+    var c = Bo.crossover(f(r.b), f(r.a), 1, 5000);
+    ok(c != null && c > 1, 'race ' + r.aName + ' vs ' + r.bName + ' has a crossover (' + c + ')');
+  });
+});
+
+section('Unit 2: step-counting interpreter');
+var u2 = ctx.CQ.content.unitData[2];
+var byId = {}; u2.snippets.forEach(function (sn) { byId[sn.id] = sn; });
+for (var nn = 0; nn <= 20; nn++) eq(Bo.steps(byId['s-lecture'].code, 'work', nn), 3 * nn * nn + 2 * nn + 1, 'lecture snippet = 3n²+2n+1 at n=' + nn);
+[1, 2, 3, 4, 5, 8, 9, 100, 1024].forEach(function (n2) {
+  eq(Bo.steps(byId['s-doubling'].code, 'work', n2), 1 + Math.ceil(Math.log2(n2)), 'doubling loop: 1 + ceil(log2 n) at n=' + n2);
+});
+var expectClass = { 's-linear': 'n', 's-nested': 'n2', 's-const': '1', 's-sequential': 'n', 's-lin-sum': 'n', 's-lecture': 'n2', 's-doubling': 'logn',
+  's-bound10': '1', 's-half': 'n', 's-triangle': 'n2', 's-nlogn': 'nlogn', 's-hidden': 'n2', 's-cubic': 'n3', 's-const-outer': 'logn' };
+u2.snippets.forEach(function (sn) {
+  eq(Bo.classify(sn.code, 'work'), expectClass[sn.id], 'classify ' + sn.id);
+  Object.keys(sn.traps || {}).forEach(function (k) { ok(k !== expectClass[sn.id] && !!Bo.cls[k], sn.id + ' trap ' + k + ' is a wrong class'); });
+});
+// Big-O questions whose code is a DEFUN: the interpreter must agree with the stated answer.
+u2.trace.concat(u2.boss).forEach(function (q) {
+  if (q.type !== 'bigo' || !q.code || q.code.indexOf('(defun') < 0) return;
+  var names = q.code.match(/\(defun ([\w-]+)/g).map(function (m) { return m.slice(7); });
+  var label = Bo.cls[Bo.classify(q.code, names[names.length - 1])].label;
+  eq(label, q.choices[q.answer], q.id + ' answer matches the interpreter');
+});
+eq(Bo.lineSteps(byId['s-nested'].code, 'work', 3).lines, { 4: 3, 6: 9 }, 'per-line tally for nested loops at n=3');
+var threw = false; try { Bo.read('(defun x (n)'); } catch (e) { threw = true; }
+ok(threw, 'reader rejects unbalanced parentheses');
+
 section('Content integrity');
-var qs = u5.trace.concat(u5.boss, [u5.briefing.steps[3].question]);
+[ctx.CQ.content.unitData[2], u5].forEach(function (U5) {
+var qs = U5.trace.concat(U5.boss, U5.briefing.steps.filter(function (st) { return st.question; }).map(function (st) { return st.question; }));
 qs.forEach(function (q) {
-  ok(!!u5.concepts[q.concept], q.id + ' has a known concept');
+  ok(!!U5.concepts[q.concept], q.id + ' has a known concept');
   if (q.choices) {
     ok(q.answer >= 0 && q.answer < q.choices.length, q.id + ' answer index in range');
     q.choices.forEach(function (c, i) { if (i !== q.answer) ok(!!(q.explain.wrong[i] || q.explain.wrong.any), q.id + ' explains wrong choice ' + i); });
   }
   if (q.type === 'bug') q.answer.forEach(function (ln) { ok(ln >= 1 && ln <= q.code.split('\n').length, q.id + ' bug line in range'); });
+});
+Object.keys(U5.cards).forEach(function (k) { ok(U5.cards[k].unit === U5.id, k + ' card belongs to unit ' + U5.id); });
 });
 Object.keys(u5.lisp).forEach(function (k) {
   var L = u5.lisp[k], lines = L.code.split('\n').length;

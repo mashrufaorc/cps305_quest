@@ -17,11 +17,18 @@ var ROOT = path.join(__dirname, '..');
 var ctx = { console: console };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-['content/units.js', 'content/unit5.js'].forEach(function (f) {
+['engine/core.js', 'engine/bigo.js', 'content/units.js', 'content/unit2.js', 'content/unit5.js'].forEach(function (f) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
 });
 
 function norm(s) { return s.replace(/\s+/g, ' ').trim(); }
+
+function sbcl(src, tag) {
+  var tmp = path.join(os.tmpdir(), 'cq-verify-' + tag + '.lisp');
+  fs.writeFileSync(tmp, src);
+  try { return cp.execFileSync('sbcl', ['--script', tmp], { encoding: 'utf8', timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] }); }
+  finally { try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ } }
+}
 
 var units = ctx.CQ.content.unitData;
 var pass = 0, fail = 0, skipped = 0;
@@ -62,6 +69,20 @@ Object.keys(units).forEach(function (u) {
     var got = lines[lines.length - 1].trim();
     if (got === v.expect) { pass++; console.log('ok    ' + q.id + '  ' + v.form + '  =>  ' + got); }
     else { fail++; console.log('FAIL  ' + q.id + '  expected ' + v.expect + ' got ' + got); }
+  });
+
+  // 3. Step-counting snippets: SBCL (with *STEPS* instrumentation) must count
+  //    exactly what the game's interpreter counts, for several n.
+  (data.snippets || []).forEach(function (sn) {
+    var B = ctx.CQ.engine.bigo, ns = [0, 1, 2, 3, 5, 8, 13, 16];
+    var src = '(defvar *steps* 0)\n' + B.instrument(sn.code) + '\n' +
+      ns.map(function (n) { return '(setf *steps* 0) (work ' + n + ') (format t "~D " *steps*)'; }).join('\n') + '\n';
+    var out;
+    try { out = sbcl(src, sn.id); } catch (e) { fail++; console.log('FAIL  ' + sn.id + ': SBCL error ' + (e.stderr || e.message).split('\n')[0]); return; }
+    var got = out.trim().split(/\s+/).map(Number);
+    var want = ns.map(function (n) { return B.steps(sn.code, 'work', n); });
+    if (JSON.stringify(got) === JSON.stringify(want)) { pass++; console.log('ok    ' + sn.id + '  steps ' + want.join(' ')); }
+    else { fail++; console.log('FAIL  ' + sn.id + '  SBCL ' + got.join(' ') + ' vs game ' + want.join(' ')); }
   });
 });
 console.log('\nLisp verification: ' + pass + ' passed, ' + fail + ' failed, ' + skipped + ' questions without Lisp.');

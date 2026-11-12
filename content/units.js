@@ -12,7 +12,7 @@
   C.units = [
     { id: 0, title: 'Why data structures?', room: 'The Loading Dock', topic: 'Topic 1', icon: '📦', built: false },
     { id: 1, title: 'Lisp bootcamp', room: 'The Paren Forge', topic: 'Topics 1–2', icon: '()', built: false },
-    { id: 2, title: 'Big-O', room: 'The Growth Track', topic: 'Topic 2', icon: '📈', built: false },
+    { id: 2, title: 'Big-O', room: 'The Growth Track', topic: 'Topic 2', icon: '📈', built: true },
     { id: 3, title: 'Arrays vs linked lists', room: 'The Pointer Workshop', topic: 'Topic 3', icon: '🔗', built: false },
     { id: 4, title: 'Recursion', room: 'The Mirror Hall', topic: 'Topic 4', icon: '🪞', built: false },
     { id: 5, title: 'Searching and sorting', room: 'The Archive', topic: 'Topic 5', icon: '🔎', built: true },

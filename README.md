@@ -13,7 +13,8 @@ Open `index.html` in any modern browser. No server, no build step, no network: i
 
 ```
 node tests/run-tests.js      # engine, referee, counters vs theory, stability, state layer
-node tests/verify-lisp.js    # runs every Lisp result shown in the game through SBCL
+node tests/verify-lisp.js    # runs every Lisp result shown in the game through SBCL, and checks
+                             # the Big-O step counter against SBCL on every snippet
 ```
 
 `verify-lisp.js` needs `sbcl` on your PATH.
