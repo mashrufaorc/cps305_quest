@@ -10,7 +10,8 @@
 
   var defaults = function () {
     return {
-      settings: { theme: 'auto', mode: 'guided', reducedMotion: 'auto', speed: 1, sound: false, timer: false },
+      settings: { theme: 'auto', mode: 'guided', reducedMotion: 'auto', speed: 1, sound: false, timer: false, freeRoam: false },
+      placement: null,  // highest unit opened by the placement quiz
       xp: 0,
       streak: { count: 0, last: null },
       levels: {},     // levelKey -> { stars, best, completed }
@@ -146,6 +147,7 @@
     },
     setTier: function (gameId, tier) { var a = S.adapt(gameId); a.tier = tier; save(); },
 
+    setPlacement: function (unitId) { var st = load(); st.placement = Math.max(st.placement || 0, unitId); save(); },
     unlockCard: function (id) { var st = load(); if (!st.cards[id]) { st.cards[id] = true; save(); return true; } return false; },
     cardUnlocked: function (id) { return !!load().cards[id]; },
 

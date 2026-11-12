@@ -10,18 +10,18 @@
   C.unitData = C.unitData || {};
 
   C.units = [
-    { id: 0, title: 'Why data structures?', room: 'The Loading Dock', topic: 'Topic 1', icon: '📦', built: false },
-    { id: 1, title: 'Lisp bootcamp', room: 'The Paren Forge', topic: 'Topics 1–2', icon: '()', built: false },
+    { id: 0, title: 'Why data structures?', room: 'The Loading Dock', topic: 'Topic 1', icon: '📦', built: true },
+    { id: 1, title: 'Lisp bootcamp', room: 'The Paren Forge', topic: 'Topics 1–2', icon: '()', built: true },
     { id: 2, title: 'Big-O', room: 'The Growth Track', topic: 'Topic 2', icon: '📈', built: true },
-    { id: 3, title: 'Arrays vs linked lists', room: 'The Pointer Workshop', topic: 'Topic 3', icon: '🔗', built: false },
-    { id: 4, title: 'Recursion', room: 'The Mirror Hall', topic: 'Topic 4', icon: '🪞', built: false },
+    { id: 3, title: 'Arrays vs linked lists', room: 'The Pointer Workshop', topic: 'Topic 3', icon: '🔗', built: true },
+    { id: 4, title: 'Recursion', room: 'The Mirror Hall', topic: 'Topic 4', icon: '🪞', built: true },
     { id: 5, title: 'Searching and sorting', room: 'The Archive', topic: 'Topic 5', icon: '🔎', built: true },
-    { id: 6, title: 'Quicksort', room: 'The Partition Floor', topic: 'Topic 6', icon: '⚡', built: false },
-    { id: 7, title: 'Merge sort', room: 'The Conveyor Room', topic: 'Topic 7', icon: '🔀', built: false },
-    { id: 8, title: 'Stacks, queues, sets', room: 'The Loading Bay', topic: 'Topic 8', icon: '🥞', built: false },
-    { id: 9, title: 'Hashing', room: 'Hash Hotel', topic: 'Topic 9', icon: '#', built: false },
-    { id: 10, title: 'Hash tables in Lisp', room: 'The Key Vault', topic: 'Topic 10', icon: '🗝', built: false },
-    { id: 11, title: 'Trees', room: 'The Greenhouse', topic: 'Topic 11', icon: '🌳', built: false }
+    { id: 6, title: 'Quicksort', room: 'The Partition Floor', topic: 'Topic 6', icon: '⚡', built: true },
+    { id: 7, title: 'Merge sort', room: 'The Conveyor Room', topic: 'Topic 7', icon: '🔀', built: true },
+    { id: 8, title: 'Stacks, queues, sets', room: 'The Loading Bay', topic: 'Topic 8', icon: '🥞', built: true },
+    { id: 9, title: 'Hashing', room: 'Hash Hotel', topic: 'Topic 9', icon: '#', built: true },
+    { id: 10, title: 'Hash tables in Lisp', room: 'The Key Vault', topic: 'Topic 10', icon: '🗝', built: true },
+    { id: 11, title: 'Trees', room: 'The Greenhouse', topic: 'Topic 11', icon: '🌳', built: true }
   ];
 
   /* Shared glossary: lecture wording, shown at a term's first use. */

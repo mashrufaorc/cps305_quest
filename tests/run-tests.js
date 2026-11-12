@@ -13,8 +13,10 @@ function makeCtx() {
   var ctx = { console: console, Math: Math, Date: Date };
   ctx.globalThis = ctx;
   vm.createContext(ctx);
-  ['engine/core.js', 'engine/search.js', 'engine/sorts.js', 'engine/referee.js', 'engine/bigo.js', 'state/store.js',
-   'content/units.js', 'content/unit2.js', 'content/unit5.js'].forEach(function (f) {
+  var files = ['engine/core.js', 'engine/search.js', 'engine/sorts.js', 'engine/referee.js', 'engine/bigo.js', 'engine/lisp.js',
+   'engine/hashing.js', 'engine/sorts2.js', 'engine/lists.js', 'engine/stacks.js', 'engine/trees.js', 'engine/choose.js', 'state/store.js', 'content/units.js'];
+  fs.readdirSync(path.join(ROOT, 'content')).filter(function (f) { return /^unit\d+\.js$/.test(f); }).forEach(function (f) { files.push('content/' + f); });
+  files.forEach(function (f) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   });
   return ctx;
@@ -32,7 +34,7 @@ function eq(a, b, msg) { ok(JSON.stringify(a) === JSON.stringify(b), msg + ' (go
 function last(trace) { return trace[trace.length - 1]; }
 function finalValues(trace) { return E.values(last(trace).arr); }
 
-var SORTS = Object.keys(E.sorts);
+var SORTS = ['selection', 'insertion', 'insertionShift', 'binaryInsertion', 'bubble'];   // Unit 5's sorts (Units 6/7 tested below)
 var inputs = {
   random: E.makeInput('random', 12, 3),
   sorted: E.makeInput('sorted', 12, 3),
@@ -252,7 +254,7 @@ var threw = false; try { Bo.read('(defun x (n)'); } catch (e) { threw = true; }
 ok(threw, 'reader rejects unbalanced parentheses');
 
 section('Content integrity');
-[ctx.CQ.content.unitData[2], u5].forEach(function (U5) {
+Object.keys(ctx.CQ.content.unitData).map(function (k) { return ctx.CQ.content.unitData[k]; }).forEach(function (U5) {
 var qs = U5.trace.concat(U5.boss, U5.briefing.steps.filter(function (st) { return st.question; }).map(function (st) { return st.question; }));
 qs.forEach(function (q) {
   ok(!!U5.concepts[q.concept], q.id + ' has a known concept');
@@ -272,6 +274,144 @@ Object.keys(u5.lisp).forEach(function (k) {
 SORTS.forEach(function (id) {
   E.runSort(id, [3, 1, 2, 2]).forEach(function (s) { ok(u5.lisp[id].anchors[s.at] != null, id + ' anchor "' + s.at + '" mapped'); });
 });
+
+section('Lisp interpreter (engine/lisp.js)');
+var Lp = E.lisp;
+[['(+ 2 (* 3 4))', '14'], ["'(a b . c)", '(A B . C)'], ['(/ 7 2)', '7/2'], ['(or nil 0)', '0'], ['(and 1 2 3)', '3'], ["(if '() 1 2)", '2'],
+ ["(cons 'sink '(or swim))", '(SINK OR SWIM)'], ['(make-array 3)', '#(0 0 0)'], ['(do ((i 0 (1+ i)) (j 0 i)) ((= i 3) j))', '2'], ['(do* ((i 0 (1+ i)) (j 0 i)) ((= i 3) j))', '3'],
+ ["(case 3 (1 'a) ((2 3) 'b) (otherwise 'c))", 'B'], ['(let ((s nil)) (push 1 s) (push 2 s) (list (pop s) s))', '(2 (1))'], ['(2 + 3)', 'ERROR: Illegal function call (2 + 3)'],
+ ['(defun f (n) (if (< n 2) 1 (* n (f (- n 1))))) (f 10)', '3628800'], ['(defun g (n) (g n)) (g 1)', 'ERROR: Control stack exhausted (no more space for function call frames).'],
+ ['(defstruct (tn (:conc-name nil)) key (lc nil)) (key (make-tn :key 4))', '4'], ['(loop for (k v) in \'((a 1) (b 2)) do (print k))', 'NIL'],
+ ["(let ((h (make-hash-table :test 'equal))) (setf (gethash \"a\" h) 1) (multiple-value-list (gethash \"a\" h)))", '(1 T)'],
+ ["(let ((h (make-hash-table))) (setf (gethash \"a\" h) 1) (gethash \"a\" h))", 'NIL'], ["(eval '(* (+ 7 3) (- 5 2)))", '30']
+].forEach(function (c) { eq(Lp.run(c[0]), c[1], 'lisp: ' + c[0]); });
+eq(Lp.isTailRecursive('(defun f (n &optional (a 1)) (if (< n 2) a (f (- n 1) (* n a))))', 'f'), true, 'tail: accumulator factorial');
+eq(Lp.isTailRecursive('(defun f (n) (if (< n 2) 1 (* n (f (- n 1)))))', 'f'), false, 'tail: naive factorial');
+eq(Lp.isTailRecursive('(defun f (x) (if (null x) 0 (+ (* (first x) (first x)) (f (rest x)))))', 'f'), false, 'tail: last line but inside +');
+var u4 = ctx.CQ.content.unitData[4];
+var tr4 = Lp.trace(Object.keys(u4.defs).map(function (k) { return u4.defs[k]; }).join('\n'), '(fib-rec 6)');
+eq(tr4.events.filter(function (e) { return e.type === 'call'; }).length, 15, 'trace: (fib-rec 6) makes 15 calls');
+eq(tr4.result, '8', 'trace: (fib-rec 6) = 8');
+eq(Lp.trace(u4.broken.code, u4.broken.call, { maxDepth: 40 }).error, 'Control stack exhausted (no more space for function call frames).', 'trace: no base case overflows');
+
+section('Hashing (engine/hashing.js)');
+var Hh = E.hashing;
+eq([0, 1, 2, 3].map(function (i) { return Hh.probe('linear', 13, i, 10); }), [3, 4, 5, 6], 'linear probe sequence');
+eq([0, 1, 2].map(function (i) { return Hh.probe('quadratic', 13, i, 10); }), [3, 5, 9], 'quadratic (H1 + i + i²) mod M');
+eq(Hh.probe('double', 25, 1, 11, 7), 6, 'double hashing H2 = PRIME − (k mod PRIME)');
+for (var hs = 1; hs <= 20; hs++) {
+  ['linear', 'quadratic', 'double'].forEach(function (stg) {
+    var keys = Hh.keySets.random(7, hs, 60), b = Hh.build(keys, 11, stg);
+    ok(keys.every(function (k) { return Hh.search(b.table, k).found; }), stg + ' seed ' + hs + ': every inserted key is found');
+    var victim = keys[3], lazy = Hh.remove(b.table, victim, true).table;
+    ok(keys.filter(function (k) { return k !== victim; }).every(function (k) { return Hh.search(lazy, k).found; }), stg + ' seed ' + hs + ': lazy delete keeps every other key reachable');
+    ok(!Hh.search(lazy, victim).found, stg + ' seed ' + hs + ': deleted key is gone');
+  });
+}
+var nt = Hh.remove(Hh.build([10, 17, 24], 7, 'linear').table, 17, false).table;
+eq(Hh.search(nt, 24).found, false, 'naive delete makes 24 vanish (Tombstone Trap)');
+eq(Hh.search(Hh.remove(Hh.build([10, 17, 24], 7, 'linear').table, 17, true).table, 24).found, true, 'lazy delete keeps 24');
+eq(Hh.insert(Hh.remove(Hh.build([10, 17, 24], 7, 'linear').table, 17, true).table, 31).index, 4, 'insert reuses the tombstone');
+eq(Math.round(Hh.birthday(23) * 1000) / 10, 50.7, 'birthday paradox: 23 people ≈ 50.7%');
+eq(Hh.distribution(Hh.keySets.multiples7(6), 7, 'mod').max, 6, 'multiples of 7 mod 7 all collide');
+var codes10 = ctx.CQ.content.unitData[10].codes;
+var full4 = Hh.htCreate([['A', 1], ['B', 2], ['C', 3], ['D', 4]], 4, codes10);
+eq(full4.slots.map(function (x) { return x && x.k; }), ['D', 'A', 'C', 'B'], 'HT-CREATE size 4 matches the lecture');
+eq(Hh.htAdd(full4, 'E', 5, codes10).slots.map(function (x) { return x && x.k; }), [null, 'A', 'D', 'E', null, null, 'C', 'B'], 'HT-ADD grows to 8 like the lecture');
+// The lecture's HT code, run in our interpreter with the lab codes, agrees with the JS mirror.
+var u10 = ctx.CQ.content.unitData[10];
+eq(new Lp.Interp({ sxhash: codes10 }).repl(u10.source + "(defvar *ht* (ht-create '((a 1) (b 2) (c 3) (d 4)) 4)) (ht-add 'e 5 *ht*) (ht-array *ht*)"), '#(NIL (A . 1) (D . 4) (E . 5) NIL NIL (C . 3) (B . 2))', 'lecture HT-ADD in the interpreter');
+['probe', 'four'].forEach(function (tn) {
+  var tb = u10.tables[tn], st = Hh.htCreate(tb.kvs, tb.size, codes10);
+  tb.lookups.forEach(function (key) {
+    var js = Hh.htGetTrace(st.slots, key, codes10[key]);
+    var lispOut = new Lp.Interp({ sxhash: codes10 }).repl(u10.source + '(defvar *ht* (ht-create \'(' + tb.kvs.map(function (kv) { return '(' + kv[0] + ' ' + kv[1] + ')'; }).join(' ') + ') ' + tb.size + ')) (multiple-value-list (ht-get \'' + key + ' *ht*))');
+    eq(lispOut, js.index == null ? '(NIL NIL)' : '(' + (js.value === null ? 'NIL' : js.value) + ' ' + js.index + ')', 'HT-GET ' + key + ' on table ' + tn + ': JS mirror = lecture code');
+  });
+});
+
+section('Quicksort and merge sort (engine/sorts2.js)');
+['quickLomuto', 'quickHoare', 'merge'].forEach(function (id) {
+  Object.keys(inputs).forEach(function (kind) {
+    var input = inputs[kind];
+    eq(finalValues(E.runSort(id, input)), input.slice().sort(function (a, b) { return a - b; }), id + ' on ' + kind);
+  });
+  ['median3', 'random', 'first', 'last'].forEach(function (pv) {
+    if (id === 'merge') return;
+    for (var sd = 1; sd <= 10; sd++) { var v = E.makeInput(sd % 2 ? 'random' : 'dupes', 17, sd); ok(E.isSorted(E.values(E.countSort(E.sorts[id].gen(v, null, { pivot: pv, seed: sd })).arr)), id + ' ' + pv + ' seed ' + sd); }
+  });
+  var tr = E.runSort(id, [6, 2, 9, 1, 7, 4, 4, 8]);
+  E.referee.decisions(id, tr).forEach(function (d, k) { ok(d.check(d.expected).ok, id + ' decision ' + k + ' accepts its expected move'); });
+});
+eq(finalValues(E.runSort('quickLomuto', [2, 4, 6, 5, 8, 9, 0, 1, 3, 5])), [0, 1, 2, 3, 4, 5, 5, 6, 8, 9], 'lecture quicksort example');
+[5, 10, 20, 30].forEach(function (n) {
+  var srt = E.makeInput('sorted', n, 1);
+  eq(E.countSort(E.quickLomuto(srt)).counters.comparisons, n * (n - 1) / 2, 'Lomuto on sorted n=' + n + ' is n(n−1)/2 (worst case)');
+  ok(E.countSort(E.quickLomuto(srt, null, { pivot: 'median3' })).depth < n - 1, 'median-of-3 avoids the n-deep tree, n=' + n);
+});
+var lom = E.collect(E.quickLomuto([2, 8, 1, 0, 5, 6, 3, 9, 7, 4]));
+var place = lom.filter(function (s) { return s.at === 'place'; })[0];
+eq(E.values(place.arr), [2, 1, 0, 3, 4, 6, 8, 9, 7, 5], 'first Lomuto partition matches the SBCL-verified u6t2 answer');
+[16, 64, 256].forEach(function (n) {
+  ['sorted', 'reversed', 'random'].forEach(function (k) {
+    var c = E.countSort(E.mergeSort(E.makeInput(k, n, 3))).counters.comparisons;
+    ok(c <= n * Math.log2(n), 'merge sort ' + k + ' n=' + n + ': ' + c + ' ≤ n log₂ n');
+  });
+});
+var ml = E.collect(E.mergeLists([1, 2], [3, 4, 5, 6]));
+eq(ml[ml.length - 1].comparisons, 2, 'MERGE-LISTS (1 2)(3 4 5 6): 2 comparisons (SBCL-verified)');
+eq(E.collect(E.mergeLists([5], [5])).filter(function (s) { return s.at === 'decide'; })[0].take, 'b', 'MERGE-LISTS takes the second list on a tie (as the lecture code does)');
+var pa = E.partitionAt([1, 2, 3, 4, 5], 0, 4, 2);
+eq([pa.values, pa.p, pa.comparisons], [[1, 2, 3, 4, 5], 2, 4], 'partitionAt with the median pivot');
+
+section('Linked lists and stacks (engine/lists.js, engine/stacks.js)');
+var LLm = E.lists, ins = LLm.task('insert', [3, 8, 5], { x: 7, after: 1 });
+var bad = LLm.check(ins, ins.start, { from: ins.after, to: 'new' });
+eq([bad.ok, bad.code, bad.data.lost], [false, 'list.orphan', '5'], 'insert in the wrong order orphans 5');
+var good1 = LLm.check(ins, ins.start, { from: 'new', to: ins.start.nodes[ins.after].next });
+var good2 = LLm.check(ins, good1.state, { from: ins.after, to: 'new' });
+eq([good1.ok, good2.ok, good2.done, LLm.values(good2.state)], [true, true, true, [3, 8, 7, 5]], 'insert in the right order');
+var pre = LLm.task('prepend', [1, 2]);
+eq(LLm.check(pre, pre.start, { from: 'head', to: 'new' }).code, 'list.orphan', 'prepend: moving HEAD first orphans the list');
+var rem = LLm.task('remove', [1, 2, 3], { index: 1 });
+eq(LLm.check(rem, rem.start, { from: rem.start.head, to: 'n2' }).done, true, 'remove: one move');
+var St = E.stacks;
+eq([St.parChecker(['[', '[', ']', ']']).result, St.parChecker(['[', ']', ']']).result, St.parChecker(['[', 'x', ']']).reason, St.parChecker(['[', '[', ']']).reason], [true, false, 'invalid', 'leftover'], 'PAR-CHECKER cases');
+eq(St.monoPush([1, 2, 5, 7], 3), { stack: [1, 2, 3], popped: [7, 5] }, 'monotonic: pushing 3 onto 1 2 5 7 pops 7 and 5');
+var q8 = St.ringCreate(4);
+['a', 'b', 'c', 'd'].forEach(function (x) { q8 = St.ringOp(q8, 'enqueue', x).q; });
+q8 = St.ringOp(q8, 'dequeue').q; q8 = St.ringOp(q8, 'enqueue', 'e').q;
+eq([q8.head, q8.tail, q8.count, q8.data], [1, 1, 4, ['e', 'b', 'c', 'd']], 'ring buffer matches the SBCL run (head 1, tail 1, #(E B C D))');
+var dq = { front: [], back: [] };
+[['pushBack', 1], ['pushBack', 2], ['pushBack', 3]].forEach(function (o) { dq = St.dequeOp(dq, o[0], o[1]).dq; });
+var pf = St.dequeOp(dq, 'popFront');
+eq([pf.value, pf.moved], [1, 3], 'two-stack deque: pop-front moves 3 items across and returns the oldest');
+eq([St.union([1, 2], [2, 3]).set.sort(), St.intersection([1, 2], [2, 3]).set, St.difference([1, 2], [2, 3]).set, St.subset([1, 2], [1, 2, 3]).result], [[1, 2, 3], [2], [1], true], 'set operations');
+
+section('Trees (engine/trees.js)');
+var TRe = E.trees, btx = TRe.sampleBinary();
+eq(TRe.traverse(btx, 'pre').map(function (v) { return v.label; }).join(' '), '8 3 1 6 4 7 10 14 13', 'binary pre-order (lecture)');
+eq(TRe.traverse(btx, 'in').map(function (v) { return v.label; }).join(' '), '1 3 4 6 7 8 10 13 14', 'binary in-order');
+eq(TRe.traverse(btx, 'post').map(function (v) { return v.label; }).join(' '), '1 4 7 6 3 13 14 10 8', 'binary post-order');
+eq(TRe.traverse(btx, 'level').map(function (v) { return v.label; }).join(' '), '8 3 10 1 6 14 4 7 13', 'binary level order (lecture)');
+var nx = TRe.sampleNary();
+eq(TRe.traverse(nx, 'level').map(function (v) { return v.label; }).join(''), '*E+FDMAXABC', 'n-ary level order prints *E+FDMAXABC (lecture)');
+eq(TRe.traverse(nx, 'post').map(function (v) { return v.label; }).join(''), 'FEDABCMAX+*', 'n-ary post-order prints FEDABCMAX+* (lecture)');
+var threwIn = false; try { TRe.traverse(nx, 'in'); } catch (e) { threwIn = true; }
+ok(threwIn, 'in-order is refused on an n-ary tree');
+var ixb = TRe.index(btx), n13 = TRe.flat(btx).filter(function (n) { return n.label === '13'; })[0];
+eq([ixb[n13.id].depth, ixb[n13.id].level, ixb.treeHeight, ixb[btx.id].height], [3, 4, 3, 3], 'depth / level / height of the lecture tree');
+[['3/(4-2)', '(/ 3 (- 4 2))'], ['2+3*4', '(+ 2 (* 3 4))'], ['8-2-1', '(- (- 8 2) 1)'], ['(7+3)*(5-2)', '(* (+ 7 3) (- 5 2))']].forEach(function (c) {
+  eq(TRe.toPrefix(TRe.parse(c[0])), c[1], 'parse ' + c[0]);
+  eq(Lp.run(c[1]), String(Lp.run(c[1])), 'prefix form runs: ' + c[1]);
+});
+eq(Lp.run(TRe.toPrefix(TRe.parse('3/(4-2)'))), '3/2', 'Lisp keeps 3/(4-2) as the ratio 3/2');
+
+section('Choosing structures (engine/choose.js)');
+var CHs = E.choose, u0 = ctx.CQ.content.unitData[0];
+var expectBest = { drive: ['list', 'ring'], prepend: ['list'], lookup: ['hash'], pixels: ['array'], undo: ['array', 'list'], spell: ['hash'], phone: ['sorted'], org: ['tree'], playlist: ['list'],
+  brackets: ['list'], bfs: ['ring'], cache: ['hash'], leaderboard: ['sorted'], filesystem: ['tree'] };
+u0.scenarios.concat(u0.crossScenarios).forEach(function (sc) { eq(CHs.rank(sc.ops, sc.n, sc.offer).best.sort(), expectBest[sc.id].sort(), 'scenario ' + sc.id + ' best structure'); });
 
 section('State: storage blocked, mastery, adaptive tiers');
 var ctx2 = makeCtx();

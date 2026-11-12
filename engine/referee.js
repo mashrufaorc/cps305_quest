@@ -141,8 +141,74 @@
     return out;
   }
 
+  /* Lomuto: at each comparison with the pivot, swap it into the i-region or leave
+   * it; at the end, tap where the pivot lands (slot i). */
+  function lomutoDecisions(trace) {
+    var out = [];
+    trace.forEach(function (s, k) {
+      if (s.at === 'compare') {
+        var v = s.arr[s.j].v, p = s.pivotValue != null ? s.pivotValue : s.arr[s.hi].v, exp = s.result ? 'swap' : 'skip';
+        out.push({ type: 'choice', options: ['swap', 'skip'], labels: { swap: '⇄ Swap into i', skip: '→ Leave it' }, showAt: k, resumeTo: s.result ? k + 1 : k, expected: exp,
+          concept: 'lomuto', focus: [s.j, s.hi], prompt: 'lomuto.prompt', promptData: { v: v, p: p, i: s.ppvt },
+          hint: { code: 'lomuto.hint', data: { v: v, p: p } },
+          check: function (ch) {
+            if (ch === exp) return { ok: true };
+            return { ok: false, code: exp === 'swap' ? 'lomuto.shouldSwap' : (v === p ? 'lomuto.equal' : 'lomuto.shouldSkip'), data: { v: v, p: p, i: s.ppvt } };
+          } });
+      }
+      if (s.at === 'place') {
+        var prev = trace[k - 1], land = s.landed;
+        out.push({ type: 'pick', showAt: k - 1, resumeTo: k, expected: land, concept: 'lomuto', prompt: 'lomuto.placePrompt', promptData: { p: s.arr[land].v },
+          hint: { code: 'lomuto.placeHint', data: { i: land } },
+          check: function (ch) { return ch === land ? { ok: true } : { ok: false, code: 'lomuto.place', data: { i: land, choice: ch } }; } });
+        void prev;
+      }
+    });
+    return out;
+  }
+  function partitionPivot(trace, k) { for (var q = k; q >= 0; q--) if (trace[q].at === 'partition') return trace[q].pivotValue; return null; }
+  /* Hoare: tap where i stops, where j stops, then decide swap or return j. */
+  function hoareDecisions(trace) {
+    var out = [];
+    trace.forEach(function (s, k) {
+      if (s.at === 'iStop' || s.at === 'jStop') {
+        var isI = s.at === 'iStop', exp = isI ? s.iStop : s.jStop, p = partitionPivot(trace, k);
+        out.push({ type: 'pick', showAt: k - 1, resumeTo: k, expected: exp, concept: 'hoare', prompt: isI ? 'hoare.iPrompt' : 'hoare.jPrompt', promptData: { p: p },
+          hint: { code: isI ? 'hoare.iHint' : 'hoare.jHint', data: { p: p } },
+          check: function (ch) {
+            if (ch === exp) return { ok: true };
+            var arr = trace[k].arr;
+            return { ok: false, code: isI ? 'hoare.iWrong' : 'hoare.jWrong', data: { choice: ch, exp: exp, p: p, v: arr[ch] ? arr[ch].v : '?', ve: arr[exp].v } };
+          } });
+      }
+      if (s.at === 'return' || s.at === 'swap') {
+        var expd = s.at === 'return' ? 'return' : 'swap', prevS = trace[k - 1];
+        var iS = prevS.marks.i, jS = prevS.marks.j;
+        out.push({ type: 'choice', options: ['swap', 'return'], labels: { swap: '⇄ Swap i and j', 'return': '↩ Return j' }, showAt: k - 1, resumeTo: k, expected: expd, concept: 'hoare',
+          focus: [iS, jS], prompt: 'hoare.decide', promptData: { i: iS, j: jS }, hint: { code: 'hoare.decideHint', data: { i: iS, j: jS } },
+          check: function (ch) { return ch === expd ? { ok: true } : { ok: false, code: expd === 'swap' ? 'hoare.shouldSwap' : 'hoare.shouldReturn', data: { i: iS, j: jS } }; } });
+      }
+    });
+    return out;
+  }
+  /* Merge sort: at each comparison of the two fronts, take left or right. */
+  function mergeDecisions(trace) {
+    var out = [];
+    trace.forEach(function (s, k) {
+      if (s.at !== 'compare') return;
+      var exp = s.result, L = s.left, Rr = s.right;
+      out.push({ type: 'choice', options: ['left', 'right'], labels: { left: '← Take ' + L, right: 'Take ' + Rr + ' →' }, showAt: k, resumeTo: k, expected: exp, concept: 'merge',
+        focus: [s.marks.i, s.marks.j], prompt: 'merge.prompt', promptData: { l: L, r: Rr }, hint: { code: 'merge.hint', data: { l: L, r: Rr } },
+        check: function (ch) { return ch === exp ? { ok: true } : { ok: false, code: L === Rr ? 'merge.tie' : 'merge.wrong', data: { l: L, r: Rr, take: exp === 'left' ? L : Rr } }; } });
+    });
+    return out;
+  }
+
   R.decisions = function (algo, trace) {
     switch (algo) {
+      case 'quickLomuto': return lomutoDecisions(trace);
+      case 'quickHoare': return hoareDecisions(trace);
+      case 'merge': return mergeDecisions(trace);
       case 'selection': return selectionDecisions(trace);
       case 'insertion': case 'insertionShift': case 'binaryInsertion': return insertionDecisions(trace);
       case 'bubble': return bubbleDecisions(trace);

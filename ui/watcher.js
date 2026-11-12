@@ -15,12 +15,12 @@
     var panes = runs.map(function (r) {
       var trace = r.algo === 'binary' ? E.collect(E.binarySearch(r.values, r.key))
         : r.algo === 'linear' ? E.collect(E.linearSearch(r.values, r.key))
-        : E.runSort(r.algo, r.values, r.comp);
+        : r.sortOpts ? E.collect(E.sorts[r.algo].gen(r.values, r.comp, r.sortOpts)) : E.runSort(r.algo, r.values, r.comp);
       var lisp = unit.lisp[r.algo];
       var pane = h('section.pane', { 'aria-label': r.title || (lisp && lisp.title) || r.algo });
       pane.appendChild(h('h3.pane-title', null, r.title || (E.sorts[r.algo] ? E.sorts[r.algo].name : lisp.title)));
       var view = U.arrayView(pane, { bars: opts.bars, held: r.algo === 'insertionShift' || r.algo === 'binaryInsertion', label: r.title || r.algo });
-      var keys = r.algo === 'binary' || r.algo === 'linear' ? ['probes'] : r.algo === 'insertionShift' || r.algo === 'binaryInsertion' ? ['comparisons', 'shifts'] : ['comparisons', 'swaps'];
+      var keys = r.algo === 'binary' || r.algo === 'linear' ? ['probes'] : r.algo === 'insertionShift' || r.algo === 'binaryInsertion' ? ['comparisons', 'shifts'] : r.algo === 'merge' ? ['comparisons', 'writes'] : ['comparisons', 'swaps'];
       var counters = U.counters(pane, keys);
       if (opts.theory) counters.theory(opts.theory(r, trace));
       var narr = h('p.narration');

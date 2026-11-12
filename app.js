@@ -55,32 +55,50 @@
     el.appendChild(h('p.lede', null, 'You\'re the new intern at Parenthesis Labs. Every lab room has a broken system, and every fix is a data structure. Pick a room.'));
     var map = h('ol.hub-map', { 'aria-label': 'Lab rooms, in course order' });
     C.units.forEach(function (u) {
-      var built = u.built && unitOf(u.id);
+      var built = u.built && unitOf(u.id), open = built && isUnlocked(u.id);
       var inner = h('div.room-inner', null,
         h('span.room-icon', { 'aria-hidden': 'true' }, u.icon),
         h('span.room-unit', null, 'Unit ' + u.id + ' · ' + u.topic),
         h('span.room-title', null, u.title),
         h('span.room-name', null, u.room),
-        built ? h('span.room-status', null, unitStars(u.id) + ' ★ · ' + (S.unitFlag(u.id, 'boss') ? 'Boss cleared' : 'Open')) : h('span.room-status.locked', null, '🚧 Under construction'));
-      map.appendChild(h('li.room' + (built ? '.open' : '.closed'), null,
-        built ? h('a.room-link', { href: '#/u/' + u.id }, inner) : h('div.room-link', { 'aria-disabled': 'true' }, inner)));
+        !built ? h('span.room-status.locked', null, '🚧 Under construction')
+          : open ? h('span.room-status', null, unitStars(u.id) + ' ★ · ' + (S.unitFlag(u.id, 'boss') ? 'Boss cleared' : 'Open'))
+          : h('span.room-status.locked', null, '🔒 Clear Unit ' + prevUnitId(u.id) + '\'s Boss, or take the placement quiz'));
+      map.appendChild(h('li.room' + (open ? '.open' : '.closed'), null,
+        open ? h('a.room-link', { href: '#/u/' + u.id }, inner) : h('div.room-link', { 'aria-disabled': 'true' }, inner)));
     });
     el.appendChild(map);
-    var st = S.get();
     el.appendChild(h('div.hub-actions', null,
       nextUnitButton(),
-      h('button.btn', { type: 'button', disabled: true, title: 'Arrives once several units are built' }, 'Placement quiz (coming soon)'),
+      h('a.btn', { href: '#/placement' }, 'Placement quiz'),
+      h('a.btn', { href: '#/review' }, '🔁 Review Room' + (S.dueForReview().length ? ' (' + S.dueForReview().length + ' due)' : '')),
+      h('a.btn', { href: '#/exam' }, '📝 Exam Mode'),
+      h('a.btn', { href: '#/structures' }, '🧰 Pick the Right Structure'),
       h('a.btn', { href: '#/cheatsheet' }, 'Cheat Sheet'),
       h('a.btn', { href: '#/mastery' }, 'Mastery')));
-    var due = S.dueForReview();
-    if (due.length) el.appendChild(h('p.note', null, '🔁 ' + due.length + ' concept(s) are due for review. (The Review Room opens in a later phase; you can see them on the Mastery page.)'));
+    if (!S.setting('freeRoam')) el.appendChild(h('p.small', null, 'Studying for a specific lecture? Turn on "Unlock every room" in Settings.'));
     if (!S.storageOk()) el.appendChild(h('p.note.warn', null, 'Progress can\'t be saved in this browser (storage is blocked). Everything still works; it just resets when you close the tab.'));
-    void st;
   }
 
-  /* The next built unit (in course order) whose Boss isn't cleared yet. */
+  /* Rooms unlock in course order: a room opens when the previous room's Boss is
+   * cleared, when the placement quiz reaches it, when it already has progress,
+   * or when free roam is on. */
+  function prevUnitId(id) { var i = C.units.map(function (u) { return u.id; }).indexOf(id); return i > 0 ? C.units[i - 1].id : null; }
+  function hasProgress(id) {
+    var d = unitOf(id);
+    if (!d) return false;
+    if (S.unitFlag(id, 'briefing') || S.unitFlag(id, 'trace') || S.unitFlag(id, 'boss')) return true;
+    return d.games.some(function (g) { return g.levels.some(function (l) { return S.level(levelKey(id, g.id, l.id)).completed; }); });
+  }
+  function isUnlocked(id) {
+    if (S.setting('freeRoam')) return true;
+    var prev = prevUnitId(id);
+    return prev === null || S.unitFlag(prev, 'boss') || hasProgress(id) || (S.get().placement != null && S.get().placement >= id);
+  }
+
+  /* The next unlocked, built unit (in course order) whose Boss isn't cleared yet. */
   function nextUnitButton() {
-    var built = C.units.filter(function (u) { return u.built && unitOf(u.id); });
+    var built = C.units.filter(function (u) { return u.built && unitOf(u.id) && isUnlocked(u.id); });
     var u = built.filter(function (x) { return !S.unitFlag(x.id, 'boss'); })[0] || built[0];
     var started = S.unitFlag(u.id, 'briefing');
     return h('a.btn.primary', { href: '#/u/' + u.id }, (started ? 'Continue in ' : 'Start in ') + u.room + ' (Unit ' + u.id + ')');
@@ -175,6 +193,9 @@
         });
       } else if (s.kind === 'check') {
         U.question(area, s.question, { onResult: function () { afterText(); } });
+      } else if (G.briefingKinds && G.briefingKinds[s.kind]) {
+        // Unit-specific briefing steps are registered by each unit's game file.
+        G.briefingKinds[s.kind](area, s, d, afterText);
       }
     }
     show();
@@ -340,6 +361,8 @@
       updateHud();
     }
     function mountTask(container, q, done) {
+      // Boss tasks registered by a unit's game file take priority.
+      if (G.tasks && G.tasks[q.task]) return G.tasks[q.task](container, q, d, done);
       if (q.task === 'simplify') {
         G.simplifyTask(container, { terms: q.terms, unit: d, hints: false, onDone: function (r) { done({ misses: r.misses, summary: 'It is ' + r.cls + '.' }); } });
       } else if (q.task === 'binary') {
@@ -447,6 +470,9 @@
     var timer = h('input', { type: 'checkbox', checked: S.setting('timer') ? 'checked' : null });
     timer.addEventListener('change', function () { S.setting('timer', timer.checked); });
     el.appendChild(h('label.opt', null, timer, ' Show a timer in Challenge mode'));
+    var roam = h('input', { type: 'checkbox', checked: S.setting('freeRoam') ? 'checked' : null });
+    roam.addEventListener('change', function () { S.setting('freeRoam', roam.checked); });
+    el.appendChild(h('label.opt', null, roam, ' Unlock every room (free roam, for studying a specific lecture)'));
     el.appendChild(radio('theme', 'Theme', [['auto', 'Match my system'], ['light', 'Light'], ['dark', 'Dark']]));
     el.appendChild(radio('reducedMotion', 'Reduced motion', [['auto', 'Match my system'], ['on', 'On', 'no sliding animations'], ['off', 'Off']]));
     el.appendChild(h('p.small', null, 'Sound: off. (There is no sound in this build.)'));
@@ -463,6 +489,147 @@
       if (root.confirm('Erase all stars, XP and mastery data in this browser?')) { S.reset(); applyTheme(); hub(); }
     }, { cls: 'danger' }));
   }
+  /* ---------- cross-unit modes ---------- */
+  function builtUnits() { return C.units.filter(function (u) { return u.built && unitOf(u.id); }); }
+  /* Every non-task Trace/Boss question, tagged with its unit. */
+  function questionPool(filter) {
+    var out = [];
+    builtUnits().forEach(function (u) {
+      var d = unitOf(u.id);
+      d.trace.concat(d.boss).forEach(function (q) { if (q.type !== 'task' && (!filter || filter(q, u.id))) out.push({ q: q, unit: u.id }); });
+    });
+    return out;
+  }
+  /* Ask a list of questions one by one; onEnd(results [{unit, firstTry}]). */
+  function runQuestions(area, list, opts) {
+    var k = 0, results = [];
+    var label = h('p.progress', { 'aria-live': 'polite' }); area.appendChild(label);
+    var box = h('div'); area.appendChild(box);
+    var t0 = Date.now(), timer = null;
+    if (opts.timer) {
+      var tEl = h('span.chip.timer', { 'aria-live': 'off' }); area.insertBefore(tEl, label);
+      timer = setInterval(function () { var s = Math.floor((Date.now() - t0) / 1000); tEl.textContent = '⏱ ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }, 1000);
+      cleanup.push(function () { clearInterval(timer); });
+    }
+    function show() {
+      U.clear(box);
+      if (k >= list.length) { if (timer) clearInterval(timer); return opts.onEnd(results, Math.round((Date.now() - t0) / 1000)); }
+      var it = list[k], u = C.units.filter(function (x) { return x.id === it.unit; })[0];
+      label.textContent = 'Question ' + (k + 1) + ' of ' + list.length + ' · Unit ' + it.unit + ': ' + u.title;
+      U.question(box, it.q, { onResult: function (c, ft) {
+        results.push({ unit: it.unit, firstTry: ft, concept: it.q.concept });
+        k++;
+        if (opts.stopOnMiss && !ft) { if (timer) clearInterval(timer); return G.continueBtn(box, 'See result', function () { opts.onEnd(results, 0); }); }
+        G.continueBtn(box, k < list.length ? 'Next question' : 'See results', show);
+      } });
+    }
+    show();
+  }
+
+  function placement() {
+    var el = screen('Placement quiz', [{ label: 'Map', href: '#/' }, { label: 'Placement quiz' }]);
+    el.appendChild(h('p.lede', null, 'One question per room, in course order. Every room up to your first slip unlocks. (You keep every room you\'ve already opened.)'));
+    var list = builtUnits().map(function (u) {
+      var d = unitOf(u.id), q = d.trace.filter(function (x) { return x.choices; })[0] || d.boss.filter(function (x) { return x.choices; })[0];
+      return { q: q, unit: u.id };
+    }).filter(function (x) { return x.q; });
+    var area = h('div'); el.appendChild(area);
+    runQuestions(area, list, { stopOnMiss: true, onEnd: function (res) {
+      var last = res[res.length - 1], reached = last && last.firstTry ? list[list.length - 1].unit : (last ? last.unit : 0);
+      S.setPlacement(reached);
+      U.clear(area);
+      area.appendChild(h('section.result', null, h('h2', null, 'Placement done'), h('p', null, 'Rooms up to Unit ' + reached + ' are open.'), h('div.actions', null, h('a.btn.primary', { href: '#/u/' + reached }, 'Go to Unit ' + reached), h('a.btn', { href: '#/' }, 'Back to map'))));
+    } });
+  }
+
+  function review() {
+    var el = screen('Review Room', [{ label: 'Map', href: '#/' }, { label: 'Review Room' }]);
+    var due = S.dueForReview();
+    el.appendChild(h('p.lede', null, 'Concepts you slipped on come back here (Leitner boxes: a first-try hit moves a concept up a box and pushes its next review further out; a miss sends it back to box 1).'));
+    var pool = questionPool(function (q) { return due.indexOf(q.concept) >= 0; });
+    if (!pool.length) {
+      el.appendChild(h('p.note', null, due.length ? 'Nothing to quiz for the due concepts yet.' : 'Nothing is due. Come back after you play, or warm up with a random mix:'));
+      pool = E.shuffle(questionPool(), E.rng(Date.now() % 9973)).slice(0, 6);
+    } else {
+      el.appendChild(h('p.small', null, 'Due: ' + due.map(function (cid) { var d = builtUnits().map(function (u) { return unitOf(u.id); }).filter(function (x) { return x.concepts[cid]; })[0]; return d ? d.concepts[cid] : cid; }).join(', ')));
+      // One question per due concept first, then fill up to 10.
+      var picked = [], seen = {};
+      E.shuffle(pool, E.rng(Date.now() % 9973)).forEach(function (it) { if (!seen[it.q.concept] && picked.length < 10) { seen[it.q.concept] = 1; picked.push(it); } });
+      pool = picked;
+    }
+    var area = h('div'); el.appendChild(area);
+    runQuestions(area, pool, { onEnd: function (res) {
+      var ok = res.filter(function (r) { return r.firstTry; }).length;
+      U.clear(area);
+      area.appendChild(h('section.result', null, h('h2', null, 'Review done'), h('p', null, ok + ' of ' + res.length + ' right on the first try. ' + (S.dueForReview().length ? S.dueForReview().length + ' concept(s) still due.' : 'Nothing left due today.')),
+        h('div.actions', null, U.button('Again', function () { route(); }, { cls: 'primary' }), h('a.btn', { href: '#/mastery' }, 'Mastery'), h('a.btn', { href: '#/' }, 'Back to map'))));
+      updateHud();
+    } });
+  }
+
+  function exam() {
+    var el = screen('Exam Mode', [{ label: 'Map', href: '#/' }, { label: 'Exam Mode' }]);
+    el.appendChild(h('p.lede', null, 'A random mix from every room: Lisp reading, tracing and Big-O. No hints. Explanations still appear after each answer, so you learn from every slip.'));
+    var form = h('div.sandbox-form');
+    var n = h('select', { 'aria-label': 'Number of questions' }, h('option', { value: 10 }, '10 questions'), h('option', { value: 20 }, '20 questions'), h('option', { value: 30 }, '30 questions'));
+    var timed = h('input', { type: 'checkbox', checked: 'checked' });
+    var units = h('div.row');
+    var chosen = {};
+    builtUnits().forEach(function (u) {
+      var cb = h('input', { type: 'checkbox', checked: 'checked' }); chosen[u.id] = true;
+      cb.addEventListener('change', function () { chosen[u.id] = cb.checked; });
+      units.appendChild(h('label.small', null, cb, ' ' + u.id));
+    });
+    form.appendChild(h('label', null, n)); form.appendChild(h('label', null, timed, ' timed'));
+    form.appendChild(h('div.row', null, h('span.small', null, 'Units: '), units));
+    var start = U.button('Start exam ▶', function () {
+      var pool = questionPool(function (q, uid) { return chosen[uid]; });
+      if (!pool.length) return;
+      var list = E.shuffle(pool, E.rng(Date.now() % 99991)).slice(0, +n.value);
+      U.clear(area);
+      form.remove();
+      runQuestions(area, list, { timer: timed.checked, onEnd: function (res, secs) {
+        U.clear(area);
+        var ok = res.filter(function (r) { return r.firstTry; }).length, byUnit = {};
+        res.forEach(function (r) { var b = byUnit[r.unit] = byUnit[r.unit] || [0, 0]; b[1]++; if (r.firstTry) b[0]++; });
+        var tbl = h('table.mastery', null, h('thead', null, h('tr', null, h('th', null, 'Unit'), h('th', null, 'First-try correct'))));
+        var tb = h('tbody'); Object.keys(byUnit).sort(function (a, b) { return a - b; }).forEach(function (u) { tb.appendChild(h('tr', null, h('td', null, 'Unit ' + u + ': ' + C.units.filter(function (x) { return String(x.id) === u; })[0].title), h('td', null, byUnit[u][0] + ' / ' + byUnit[u][1]))); });
+        tbl.appendChild(tb);
+        S.addXp(ok * 5); updateHud();
+        area.appendChild(h('section.result', null, h('h2', null, 'Exam: ' + ok + ' / ' + res.length + ' (' + Math.round(ok / res.length * 100) + '%)'), secs ? h('p.small', null, 'Time: ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0')) : null,
+          h('div.table-wrap', null, tbl), h('p.small', null, 'Concepts you missed are now in the Review Room.'),
+          h('div.actions', null, U.button('New exam', function () { route(); }, { cls: 'primary' }), h('a.btn', { href: '#/review' }, 'Review Room'), h('a.btn', { href: '#/' }, 'Back to map'))));
+      } });
+    }, { cls: 'primary' });
+    form.appendChild(start);
+    el.appendChild(form);
+    var area = h('div'); el.appendChild(area);
+  }
+
+  function structures() {
+    var el = screen('Pick the Right Structure', [{ label: 'Map', href: '#/' }, { label: 'Pick the Right Structure' }]);
+    el.appendChild(h('p.lede', null, 'Jobs from every room: queues, stacks, hash tables, sorted arrays, trees. Pick the structure; the cost counter shows what a wrong choice would cost.'));
+    var d0 = unitOf(0), list = E.shuffle(d0.scenarios.concat(d0.crossScenarios), E.rng(Date.now() % 9973)).slice(0, 8), k = 0, misses = 0;
+    var area = h('div'); el.appendChild(area);
+    function next() {
+      U.clear(area);
+      if (k >= list.length) {
+        S.addXp(Math.max(0, 40 - misses * 5)); updateHud();
+        return area.appendChild(h('section.result', null, h('h2', null, 'Done'), h('p', null, list.length + ' jobs, ' + misses + ' costly choice(s).'), h('div.actions', null, U.button('Again', function () { route(); }, { cls: 'primary' }), h('a.btn', { href: '#/' }, 'Back to map'))));
+      }
+      area.appendChild(h('h3', null, 'Job ' + (k + 1) + ' of ' + list.length));
+      G.rightToolTask(area, { scenario: list[k], hints: false, onDone: function (r) { misses += r.misses; k++; G.continueBtn(area, 'Next job', next); } });
+    }
+    next();
+  }
+
+  function lockedRoom(uid) {
+    var u = C.units.filter(function (x) { return x.id === uid; })[0];
+    var el = screen('Unit ' + uid + ': ' + u.title, [{ label: 'Map', href: '#/' }, { label: u.room }]);
+    el.appendChild(h('p', null, '🔒 ' + u.room + ' opens when you clear Unit ' + prevUnitId(uid) + '\'s Boss.'));
+    el.appendChild(h('div.actions', null, h('a.btn.primary', { href: '#/placement' }, 'Take the placement quiz'), h('a.btn', { href: '#/settings' }, 'Unlock every room (Settings)'), h('a.btn', { href: '#/' }, 'Back to map')));
+  }
+
   function underConstruction(uid) {
     var u = C.units.filter(function (x) { return x.id === uid; })[0];
     if (!u) return notFound();
@@ -484,6 +651,7 @@
       if (p[0] === 'u') {
         var uid = +p[1];
         if (!unitOf(uid)) return underConstruction(uid);
+        if (!isUnlocked(uid)) return lockedRoom(uid);
         if (p.length === 2) return unitRoom(uid);
         if (p[2] === 'briefing') return briefing(uid);
         if (p[2] === 'g') return level(uid, p[3], p[4]);
@@ -491,6 +659,10 @@
         if (p[2] === 'boss') return quizScreen(uid, 'boss');
         if (p[2] === 'summary') return summary(uid);
       }
+      if (p[0] === 'placement') return placement();
+      if (p[0] === 'review') return review();
+      if (p[0] === 'exam') return exam();
+      if (p[0] === 'structures') return structures();
       if (p[0] === 'cheatsheet') return cheatsheet();
       if (p[0] === 'mastery') return mastery();
       if (p[0] === 'settings') return settings();

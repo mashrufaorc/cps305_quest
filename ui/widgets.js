@@ -7,7 +7,7 @@
   var U = root.CQ.ui;
   var h = U.h;
 
-  var LABELS = { comparisons: 'Comparisons', swaps: 'Swaps', shifts: 'Shifts', probes: 'Probes', weighings: 'Weighings' };
+  var LABELS = { comparisons: 'Comparisons', swaps: 'Swaps', shifts: 'Shifts', probes: 'Probes', weighings: 'Weighings', writes: 'Writes', calls: 'Calls' };
 
   /* counters(container, ['comparisons','swaps'], {theory: {comparisons: 'n(n−1)/2 = 15'}}) */
   U.counters = function (container, keys, opts) {

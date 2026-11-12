@@ -12,6 +12,7 @@
   function buildTrace(o) {
     if (o.algo === 'binary') return E.collect(E.binarySearch(o.values, o.key));
     if (o.algo === 'linear') return E.collect(E.linearSearch(o.values, o.key));
+    if (o.sortOpts) return E.collect(E.sorts[o.algo].gen(o.values, o.comp, o.sortOpts));
     return E.runSort(o.algo, o.values, o.comp);
   }
 
@@ -35,7 +36,7 @@
     var choiceRow = h('div.choice-row'); wrap.appendChild(choiceRow);
     var tools = h('div.tools');
     wrap.appendChild(tools);
-    var keys = isSearch ? ['probes'] : opts.algo === 'insertionShift' || opts.algo === 'binaryInsertion' ? ['comparisons', 'shifts'] : ['comparisons', 'swaps'];
+    var keys = isSearch ? ['probes'] : opts.algo === 'insertionShift' || opts.algo === 'binaryInsertion' ? ['comparisons', 'shifts'] : opts.algo === 'merge' ? ['comparisons', 'writes'] : ['comparisons', 'swaps'];
     var side = h('div.runner-side'); wrap.appendChild(side);
     var counters = U.counters(side, keys);
     var narr = h('p.narration', { 'aria-live': 'polite' });
@@ -89,7 +90,8 @@
       U.clear(choiceRow);
       if (dec.type === 'choice') {
         dec.options.forEach(function (o, i) {
-          choiceRow.appendChild(U.button(h('span', null, h('kbd', null, o === 'swap' ? 'S' : 'K'), ' ', o === 'swap' ? '⇄ Swap' : '✓ Keep'), function () { choose(o); }, { cls: 'choice big' }));
+          var lab = dec.labels && dec.labels[o] ? dec.labels[o] : o === 'swap' ? '⇄ Swap' : '✓ Keep';
+          choiceRow.appendChild(U.button(h('span', null, h('kbd', null, String(i + 1)), ' ', lab), function () { choose(o); }, { cls: 'choice big' }));
         });
       }
       U.announce(p);
@@ -185,8 +187,10 @@
     function onKey(e) {
       if (!document.body.contains(wrap)) { document.removeEventListener('keydown', onKey); return; }
       if (U.typing(e) || e.ctrlKey || e.metaKey || e.altKey || d >= ds.length || ds[d].type !== 'choice') return;
-      if (e.key === 's' || e.key === 'S') choose('swap');
-      if (e.key === 'k' || e.key === 'K') choose('keep');
+      var opts2 = ds[d].options, n = parseInt(e.key, 10);
+      if (n >= 1 && n <= opts2.length) choose(opts2[n - 1]);
+      else if ((e.key === 's' || e.key === 'S') && opts2.indexOf('swap') >= 0) choose('swap');
+      else if ((e.key === 'k' || e.key === 'K') && opts2.indexOf('keep') >= 0) choose('keep');
     }
     document.addEventListener('keydown', onKey);
 

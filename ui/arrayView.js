@@ -19,7 +19,9 @@
     end: { glyph: '■', label: 'end', cls: 'm-end' },
     lb: { glyph: '[', label: 'lb', cls: 'm-lb' },
     ub: { glyph: ']', label: 'ub', cls: 'm-lb' },
-    mid: { glyph: '▼', label: 'mid', cls: 'm-mid' }
+    mid: { glyph: '▼', label: 'mid', cls: 'm-mid' },
+    pivot: { glyph: '◆', label: 'pivot', cls: 'm-best' },
+    k: { glyph: '■', label: 'k', cls: 'm-end' }
   };
   U.MARKS = MARKS;
 
